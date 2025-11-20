@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Solar System</title>
+    <style>
+        :root {
+            --bg-color: #050510;
+            --panel-bg: rgba(20, 20, 35, 0.8);
+            --text-color: #eee;
+            --accent-color: #00d2ff;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            overflow: hidden; /* Prevent scrollbars, we use zoom/pan */
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* Background Stars */
+        .star {
+            position: absolute;
+            background: white;
+            border-radius: 50%;
+            opacity: 0.8;
+            z-index: 0;
+            animation: twinkle 2s infinite alternate;
+        }
+
+        @keyframes twinkle {
+            from { opacity: 0.3; }
+            to { opacity: 1; }
+        }
+
+        /* Main Simulation Container */
+        #universe {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: grab;
+            z-index: 1;
+        }
+
+        #universe:active {
+            cursor: grabbing;
+        }
+
+        #solar-system {
+            position: relative;
+            width: 0;
+            height: 0;
+            transform-style: preserve-3d;
+            transition: transform 0.1s linear;
+        }
+
+        /* The Sun */
+        #sun {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 60px;
+            height: 60px;
+            background: radial-gradient(circle, #ffd700, #ff8c00);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 40px #ff8c00, 0 0 80px rgba(255, 140, 0, 0.4);
+            z-index: 10;
+        }
+
+        /* Orbits and Planets */
+        .orbit {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none; /* Let clicks pass through orbits */
+            z-index: 2;
+        }
+
+        .planet {
+            position: absolute;
+            border-radius: 50%;
+            z-index: 5;
+            cursor: pointer;
+            transition: box-shadow 0.3s;
+            /* Centering the planet on its coordinate */
+            transform-origin: center center; 
+        }
+
+        .planet:hover {
+            box-shadow: 0 0 15px white;
+            z-index: 20;
+        }
+
+        /* Specific Planet Styles for Saturn's Ring */
+        .planet-ring::after {
+            content: '';
+            position: absolute;
+            width: 160%;
+            height: 160%;
+            top: -30%;
+            left: -30%;
+            border-radius: 50%;
+            border: 6px solid rgba(180, 160, 140, 0.6);
+            border-top-color: transparent; 
+            border-bottom-color: transparent; 
+            transform: rotate(45deg);
+            pointer-events: none;
+        }
+
+        /* UI Layer */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Let clicks pass through empty areas */
+            z-index: 100;
+        }
+
+        /* Controls */
+        .controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--panel-bg);
+            padding: 15px 25px;
+            border-radius: 30px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            backdrop-filter: blur(5px);
+            pointer-events: auto;
+            border: 1px solid rgba(255,255,255,0.1);
+            flex-wrap: wrap;
+            justify-content: center;
+            min-width: 300px;
+        }
+
+        button {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: white;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            background: var(--accent-color);
+            color: #000;
+        }
+
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        input[type="range"] {
+            width: 100px;
+            cursor: pointer;
+        }
+
+        /* Legend (Side List) */
+        .legend {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: var(--panel-bg);
+            padding: 15px;
+            border-radius: 10px;
+            pointer-events: auto;
+            border: 1px solid rgba(255,255,255,0.1);
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .legend h3 {
+            font-size: 16px;
+            margin-bottom: 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+            padding-bottom: 5px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+        }
+
+        .legend-item:hover {
+            background: rgba(255,255,255,0.1);
+        }
+
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        /* Info Panel (Tooltip) */
+        #info-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 250px;
+            background: var(--panel-bg);
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid var(--accent-color);
+            backdrop-filter: blur(10px);
+            pointer-events: auto;
+            display: none; /* Hidden by default */
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(20px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        #info-name { font-size: 24px; font-weight: bold; margin-bottom: 5px; color: var(--accent-color); }
+        #info-details { font-size: 14px; line-height: 1.5; color: #ccc; }
+        .fact-box { margin-top: 10px; font-style: italic; color: #fff; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 5px; }
+
+        /* Responsive Adjustments */
+        @media (max-width: 768px) {
+            .legend { display: none; } /* Hide legend on mobile to save space */
+            .controls { width: 90%; padding: 10px; bottom: 10px; }
+            #info-panel { top: auto; bottom: 80px; right: 50%; transform: translateX(50%); width: 90%; }
+            @keyframes slideIn {
+                from { transform: translate(50%, 20px); opacity: 0; }
+                to { transform: translate(50%, 0); opacity: 1; }
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Background Stars Container -->
+    <div id="star-field"></div>
+
+    <!-- The Universe Wrapper -->
+    <div id="universe">
+        <div id="solar-system">
+            <div id="sun" title="The Sun"></div>
+            <!-- Planets and Orbits will be injected here via JS -->
+        </div>
+    </div>
+
+    <!-- UI Layer -->
+    <div id="ui-layer">
+        
+        <!-- Left Side Legend -->
+        <div class="legend">
+            <h3>Planets</h3>
+            <div id="legend-list"></div>
+        </div>
+
+        <!-- Info Panel -->
+        <div id="info-panel">
+            <div id="info-name">Planet Name</div>
+            <div id="info-details">Distance: 0 AU</div>
+            <div class="fact-box" id="info-fact">Fact goes here.</div>
+            <button onclick="closeInfo()" style="margin-top:10px; width:100%;">Close</button>
+        </div>
+
+        <!-- Bottom Controls -->
+        <div class="controls">
+            <button id="btn-play-pause">Pause</button>
+            
+            <div class="slider-container">
+                <span>Speed:</span>
+                <input type="range" id="speed-slider" min="0" max="5" step="0.1" value="1">
+            </div>
+
+            <div class="slider-container" style="margin-left: 10px; border-left: 1px solid #555; padding-left: 10px;">
+                <button id="btn-zoom-out">-</button>
+                <button id="btn-reset">Reset</button>
+                <button id="btn-zoom-in">+</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * Solar System Configuration
+         * Distances and sizes are not to exact scale for visibility purposes,
+         * but relative ordering and speed hierarchies are preserved.
+         */
+        const planetsData = [
+            { name: "Mercury", color: "#A5A5A5", size: 10, distance: 60, speed: 0.04, fact: "Smallest planet, closest to the Sun." },
+            { name: "Venus", color: "#E3BB76", size: 16, distance: 90, speed: 0.015, fact: "Hottest planet due to thick atmosphere." },
+            { name: "Earth", color: "#22A6B3", size: 18, distance: 130, speed: 0.01, fact: "The only known planet to support life." },
+            { name: "Mars", color: "#EB4D4B", size: 12, distance: 170, speed: 0.008, fact: "Known as the Red Planet due to iron oxide." },
+            { name: "Jupiter", color: "#D980FA", size: 45, distance: 260, speed: 0.004, fact: "Largest planet, a gas giant with a Great Red Spot." },
+            { name: "Saturn", color: "#F7B731", size: 38, distance: 350, speed: 0.003, fact: "Famous for its prominent, complex ring system.", hasRing: true },
+            { name: "Uranus", color: "#7EFFF5", size: 25, distance: 430, speed: 0.002, fact: "Rotates on its side, making it unique." },
+            { name: "Neptune", color: "#4834D4", size: 24, distance: 510, speed: 0.001, fact: "The windiest planet, with supersonic winds." }
+        ];
+
+        // Global State
+        let isPaused = false;
+        let speedMultiplier = 1;
+        let zoomLevel = 1;
+        let animationId;
+        
+        // DOM Elements
+        const solarSystem = document.getElementById('solar-system');
+        const legendList = document.getElementById('legend-list');
+        const infoPanel = document.getElementById('info-panel');
+        
+        // Store planet DOM elements and their current angles
+        const planetElements = [];
+
+        /**
+         * Initialize the Simulation
+         */
+        function init() {
+            createStars();
+            createSolarSystem();
+            setupControls();
+            startAnimation();
+        }
+
+        /**
+         * Create random background stars
+         */
+        function createStars() {
+            const starField = document.getElementById('star-field');
+            const count = 150;
+            for (let i = 0; i < count; i++) {
+                const star = document.createElement('div');
+                star.className = 'star';
+                const x = Math.random() * 100;
+                const y = Math.random() * 100;
+                const size = Math.random() * 2 + 1;
+                star.style.left = x + '%';
+                star.style.top = y + '%';
+                star.style.width = size + 'px';
+                star.style.height = size + 'px';
+                star.style.animationDelay = Math.random() * 2 + 's';
+                starField.appendChild(star);
+            }
+        }
+
+        /**
+         * Generate HTML for Orbits and Planets
+         */
+        function createSolarSystem() {
+            planetsData.forEach((planet, index) => {
+                // 1. Create Orbit Ring
+                const orbit = document.createElement('div');
+                orbit.className = 'orbit';
+                const diameter = planet.distance * 2;
+                orbit.style.width = diameter + 'px';
+                orbit.style.height = diameter + 'px';
+                solarSystem.appendChild(orbit);
+
+                // 2. Create Planet Element
+                const planetEl = document.createElement('div');
+                planetEl.className = 'planet';
+                if (planet.hasRing) planetEl.classList.add('planet-ring');
+                
+                planetEl.style.width = planet.size + 'px';
+                planetEl.style.height = planet.size + 'px';
+                planetEl.style.backgroundColor = planet.color;
+                
+                // Center the planet element itself so calculations are from center
+                planetEl.style.marginTop = -(planet.size / 2) + 'px';
+                planetEl.style.marginLeft = -(planet.size / 2) + 'px';
+
+                // Interaction
+                planetEl.addEventListener('click', () => showInfo(planet));
+                planetEl.addEventListener('mouseenter', () => showInfo(planet));
+
+                solarSystem.appendChild(planetEl);
+
+                // 3. Add to Legend
+                const legendItem = document.createElement('div');
+                legendItem.className = 'legend-item';
+                legendItem.innerHTML = `<div class="legend-color" style="background:${planet.color}"></div> ${planet.name}`;
+                legendItem.addEventListener('click', () => {
+                    showInfo(planet);
+                    // Optional: Highlight or Focus logic could go here
+                });
+                legendList.appendChild(legendItem);
+
+                // 4. Store data for animation
+                planetElements.push({
+                    element: planetEl,
+                    angle: Math.random() * Math.PI * 2, // Random start position
+                    distance: planet.distance,
+                    speed: planet.speed,
+                    data: planet
+                });
+            });
+        }
+
+        /**
+         * Main Animation Loop
+         */
+        function startAnimation() {
+            function animate() {
+                if (!isPaused) {
+                    planetElements.forEach(p => {
+                        // Update Angle
+                        p.angle += p.speed * speedMultiplier;
+                        
+                        // Calculate Position (Polar to Cartesian)
+                        // Math.cos/sin give value between -1 and 1. Multiply by radius (distance).
+                        const x = Math.cos(p.angle) * p.distance;
+                        const y = Math.sin(p.angle) * p.distance;
+
+                        // Apply Transform
+                        p.element.style.transform = `translate(${x}px, ${y}px)`;
+                    });
+                }
+                animationId = requestAnimationFrame(animate);
+            }
+            animate();
+        }
+
+        /**
+         * UI Functions
+         */
+        function showInfo(planet) {
+            document.getElementById('info-name').innerText = planet.name;
+            document.getElementById('info-details').innerText = `Approx. Distance: ${planet.distance} million km`; // Artistic Label
+            document.getElementById('info-fact').innerText = planet.fact;
+            
+            infoPanel.style.display = 'block';
+        }
+
+        function closeInfo() {
+            infoPanel.style.display = 'none';
+        }
+
+        /**
+         * Control Logic
+         */
+        function setupControls() {
+            // Play/Pause
+            const btnPlay = document.getElementById('btn-play-pause');
+            btnPlay.addEventListener('click', () => {
+                isPaused = !isPaused;
+                btnPlay.innerText = isPaused ? "Play" : "Pause";
+                btnPlay.style.background = isPaused ? "rgba(255, 50, 50, 0.3)" : "";
+            });
+
+            // Speed Slider
+            const slider = document.getElementById('speed-slider');
+            slider.addEventListener('input', (e) => {
+                speedMultiplier = parseFloat(e.target.value);
+            });
+
+            // Zoom Logic
+            const btnZoomIn = document.getElementById('btn-zoom-in');
+            const btnZoomOut = document.getElementById('btn-zoom-out');
+            const btnReset = document.getElementById('btn-reset');
+
+            function updateZoom() {
+                solarSystem.style.transform = `scale(${zoomLevel})`;
+            }
+
+            btnZoomIn.addEventListener('click', () => {
+                zoomLevel += 0.2;
+                updateZoom();
+            });
+
+            btnZoomOut.addEventListener('click', () => {
+                zoomLevel = Math.max(0.2, zoomLevel - 0.2); // Prevent negative zoom
+                updateZoom();
+            });
+
+            btnReset.addEventListener('click', () => {
+                zoomLevel = 1;
+                speedMultiplier = 1;
+                slider.value = 1;
+                isPaused = false;
+                btnPlay.innerText = "Pause";
+                solarSystem.style.transform = `scale(1)`;
+                infoPanel.style.display = 'none';
+            });
+
+            // Mouse Wheel Zoom (Optional enhancement)
+            document.getElementById('universe').addEventListener('wheel', (e) => {
+                e.preventDefault();
+                if (e.deltaY < 0) {
+                    zoomLevel += 0.1;
+                } else {
+                    zoomLevel = Math.max(0.2, zoomLevel - 0.1);
+                }
+                updateZoom();
+            });
+        }
+
+        // Initial Setup
+        init();
+
+    </script>
+</body>
+</html>
