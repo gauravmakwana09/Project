@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Obsidian Crypto Terminal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;300;400;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --obsidian-bg: #050505;
+            --obsidian-card: rgba(20, 20, 25, 0.6);
+            --neon-cyan: #00f3ff;
+            --neon-magenta: #bc13fe;
+            --neon-green: #0aff64;
+            --glass-border: rgba(255, 255, 255, 0.08);
+        }
+
+        .hidden { display: none !important; }
+        
+        .nav-active {
+            color: var(--neon-cyan) !important;
+            text-shadow: 0 0 8px rgba(0, 243, 255, 0.4);
+        }
+
+        /* Order Book Bars */
+        .ask-bar { background: rgba(255, 50, 50, 0.2); transition: width 0.2s; }
+        .bid-bar { background: rgba(50, 255, 50, 0.2); transition: width 0.2s; }
+
+        body {
+            background-color: var(--obsidian-bg);
+            color: #e0e0e0;
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+            background-image: 
+                radial-gradient(circle at 15% 50%, rgba(188, 19, 254, 0.05) 0%, transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(0, 243, 255, 0.05) 0%, transparent 25%);
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0a0a0a; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #333; 
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--neon-cyan); 
+        }
+
+        /* Glassmorphism Card */
+        .glass-panel {
+            background: var(--obsidian-card);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        /* Gradient Border Effect */
+        .neon-border-bottom {
+            position: relative;
+        }
+        .neon-border-bottom::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--neon-cyan), transparent);
+            opacity: 0.5;
+        }
+
+        .neon-glow-text {
+            text-shadow: 0 0 10px rgba(0, 243, 255, 0.5);
+        }
+
+        .neon-glow-text-magenta {
+            text-shadow: 0 0 10px rgba(188, 19, 254, 0.5);
+        }
+
+        /* Hover Effects */
+        .interactive-row:hover {
+            background: rgba(255, 255, 255, 0.03);
+            border-left: 2px solid var(--neon-cyan);
+            cursor: pointer;
+        }
+
+        /* Animations */
+        @keyframes scanline {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(100%); }
+        }
+        .scanline {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh;
+            background: linear-gradient(to bottom, transparent 50%, rgba(0, 243, 255, 0.02) 50%);
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 50;
+        }
+        
+        .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .loader {
+            border-top-color: var(--neon-cyan);
+            -webkit-animation: spinner 1.5s linear infinite;
+            animation: spinner 1.5s linear infinite;
+        }
+        @keyframes spinner {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="antialiased min-h-screen flex flex-col">
+
+    <!-- Scanline Overlay -->
+    <div class="scanline"></div>
+
+    <!-- Navbar -->
+    <nav class="glass-panel z-40 sticky top-0 w-full border-b border-white/10 h-16 flex items-center justify-between px-6">
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.5)]">
+                <i class="ph-bold ph-hexagon text-white text-xl"></i>
+            </div>
+            <span class="font-bold tracking-widest text-lg neon-glow-text">NEXUS<span class="text-cyan-400">.TERMINAL</span></span>
+        </div>
+
+        <div class="hidden md:flex items-center gap-8 text-sm font-medium text-gray-400">
+            <button onclick="app.switchView('dashboard')" id="nav-dashboard" class="hover:text-cyan-400 transition-colors interactive-item nav-active">DASHBOARD</button>
+            <button onclick="app.switchView('markets')" id="nav-markets" class="hover:text-cyan-400 transition-colors interactive-item">MARKETS</button>
+            <button onclick="app.switchView('exchange')" id="nav-exchange" class="hover:text-cyan-400 transition-colors interactive-item">EXCHANGE</button>
+            <button class="hover:text-cyan-400 transition-colors interactive-item">NFTs</button>
+        </div>
+
+        <div class="flex items-center gap-4">
+            <!-- Audio Toggle -->
+            <button id="audio-toggle" class="interactive-item w-10 h-10 rounded-full border border-white/10 flex items-center justify-center hover:border-cyan-500/50 hover:bg-cyan-500/10 transition-all group relative">
+                <i id="audio-icon" class="ph ph-speaker-slash text-gray-400 group-hover:text-cyan-400"></i>
+                <div class="absolute -bottom-8 right-0 w-32 bg-black/90 text-xs text-cyan-400 p-1 rounded border border-cyan-500/30 text-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                    Audio System
+                </div>
+            </button>
+            
+            <div class="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 p-[1px]">
+                <div class="w-full h-full rounded-full bg-black flex items-center justify-center overflow-hidden">
+                    <img src="https://api.dicebear.com/7.x/bottts/svg?seed=Nexus" alt="User" class="w-full h-full object-cover opacity-80 hover:opacity-100 transition-opacity">
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="flex-1 p-4 md:p-8 max-w-7xl mx-auto w-full relative">
+        
+        <!-- VIEW: DASHBOARD -->
+        <div id="view-dashboard" class="grid grid-cols-1 md:grid-cols-12 gap-6 fade-in">
+            <!-- Left Column: Portfolio & Assets (4 cols) -->
+            <div class="md:col-span-4 flex flex-col gap-6">
+                
+                <!-- Total Balance Card -->
+                <div class="glass-panel rounded-2xl p-6 relative group">
+                    <div class="absolute top-0 right-0 w-24 h-24 bg-cyan-500/10 blur-2xl rounded-full pointer-events-none"></div>
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <p class="text-gray-500 text-xs font-mono tracking-wider mb-1">TOTAL BALANCE</p>
+                            <h2 class="text-4xl font-bold text-white neon-glow-text" id="total-balance-display">$124,592<span class="text-gray-500 text-2xl">.45</span></h2>
+                        </div>
+                        <span class="px-2 py-1 rounded bg-green-500/10 border border-green-500/20 text-green-400 text-xs font-mono flex items-center gap-1">
+                            <i class="ph-bold ph-trend-up"></i> +12.4%
+                        </span>
+                    </div>
+                    <div class="flex gap-3 mt-4">
+                        <button onclick="app.deposit()" class="interactive-item flex-1 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 py-2 rounded-lg text-sm font-medium transition-all shadow-[0_0_10px_rgba(6,182,212,0.1)] hover:shadow-[0_0_15px_rgba(6,182,212,0.3)]">Deposit</button>
+                        <button class="interactive-item flex-1 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 py-2 rounded-lg text-sm font-medium transition-all">Withdraw</button>
+                    </div>
+                </div>
+
+                <!-- Asset List -->
+                <div class="glass-panel rounded-2xl flex-1 flex flex-col min-h-[400px]">
+                    <div class="p-5 border-b border-white/5 flex justify-between items-center">
+                        <h3 class="font-semibold text-gray-200">Your Assets</h3>
+                        <i class="ph ph-dots-three text-gray-500 cursor-pointer hover:text-white"></i>
+                    </div>
+                    <div class="flex-1 overflow-y-auto p-2 space-y-1" id="asset-list-container">
+                        <!-- Asset items injected via JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Center/Right Column: Charts & Market (8 cols) -->
+            <div class="md:col-span-8 flex flex-col gap-6">
+                
+                <!-- Main Chart Area -->
+                <div class="glass-panel rounded-2xl p-1 flex flex-col h-[400px]">
+                    <div class="p-4 flex justify-between items-center border-b border-white/5">
+                        <div class="flex gap-4 items-baseline">
+                            <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_10px_#22d3ee]"></span>
+                                BTC/USD
+                            </h2>
+                            <span class="text-2xl font-mono text-cyan-400">$48,291.00</span>
+                        </div>
+                        <div class="flex bg-black/40 rounded-lg p-1 gap-1">
+                            <button class="interactive-item px-3 py-1 rounded text-xs text-gray-400 hover:bg-white/10 hover:text-white transition-colors">1H</button>
+                            <button class="interactive-item px-3 py-1 rounded text-xs bg-cyan-500/20 text-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.2)]">1D</button>
+                            <button class="interactive-item px-3 py-1 rounded text-xs text-gray-400 hover:bg-white/10 hover:text-white transition-colors">1W</button>
+                        </div>
+                    </div>
+                    <div class="flex-1 relative w-full h-full p-2">
+                        <canvas id="mainChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Bottom Grid: Transactions & Swap -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    
+                    <!-- Recent Activity -->
+                    <div class="glass-panel rounded-2xl p-5">
+                        <h3 class="text-gray-400 text-sm font-bold uppercase tracking-widest mb-4">Data Stream</h3>
+                        <div class="space-y-3">
+                            <div class="interactive-row flex items-center justify-between text-sm p-2 rounded border-l-2 border-transparent hover:bg-white/5">
+                                <div class="flex items-center gap-3">
+                                    <i class="ph ph-arrow-down-left text-green-400"></i>
+                                    <div>
+                                        <div class="text-gray-200">Receive BTC</div>
+                                        <div class="text-xs text-gray-500">10:42 AM</div>
+                                    </div>
+                                </div>
+                                <div class="font-mono text-green-400">+0.042 BTC</div>
+                            </div>
+                            <div class="interactive-row flex items-center justify-between text-sm p-2 rounded border-l-2 border-transparent hover:bg-white/5">
+                                <div class="flex items-center gap-3">
+                                    <i class="ph ph-arrow-up-right text-red-400"></i>
+                                    <div>
+                                        <div class="text-gray-200">Send ETH</div>
+                                        <div class="text-xs text-gray-500">09:15 AM</div>
+                                    </div>
+                                </div>
+                                <div class="font-mono text-red-400">-1.20 ETH</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Swap Widget -->
+                    <div class="glass-panel rounded-2xl p-6 relative overflow-hidden">
+                        <div class="absolute -top-10 -right-10 w-32 h-32 bg-magenta-500/10 blur-3xl rounded-full pointer-events-none"></div>
+                        
+                        <div class="flex justify-between items-center mb-6">
+                            <h3 class="text-gray-200 font-bold">Quick Swap</h3>
+                            <i class="ph-fill ph-gear text-gray-500 hover:text-white cursor-pointer transition-colors"></i>
+                        </div>
+
+                        <div class="bg-black/40 rounded-xl p-3 border border-white/5 mb-2">
+                            <div class="flex justify-between text-xs text-gray-500 mb-1">
+                                <span>From</span>
+                                <span id="swap-eth-bal">Bal: --</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <input type="number" id="swap-amount-input" value="1.0" class="bg-transparent text-xl font-mono text-white focus:outline-none w-2/3" />
+                                <div class="flex items-center gap-2 bg-white/10 px-2 py-1 rounded-full cursor-pointer hover:bg-white/20 transition-colors">
+                                    <img src="https://cryptologos.cc/logos/ethereum-eth-logo.svg?v=026" class="w-5 h-5" alt="ETH">
+                                    <span class="font-bold text-sm">ETH</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-center -my-3 relative z-10">
+                            <button class="interactive-item w-8 h-8 rounded-full bg-gray-800 border border-gray-600 text-cyan-400 flex items-center justify-center hover:rotate-180 transition-transform duration-500 shadow-lg">
+                                <i class="ph-bold ph-arrows-down-up"></i>
+                            </button>
+                        </div>
+
+                        <div class="bg-black/40 rounded-xl p-3 border border-white/5 mb-4">
+                            <div class="flex justify-between text-xs text-gray-500 mb-1">
+                                <span>To</span>
+                                <span>(Estimated)</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <input type="number" id="swap-to-amount" value="3045.20" class="bg-transparent text-xl font-mono text-white focus:outline-none w-2/3" readonly />
+                                <div class="flex items-center gap-2 bg-white/10 px-2 py-1 rounded-full cursor-pointer hover:bg-white/20 transition-colors">
+                                    <img src="https://cryptologos.cc/logos/tether-usdt-logo.svg?v=026" class="w-5 h-5" alt="USDT">
+                                    <span class="font-bold text-sm">USDT</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button id="swap-btn" class="interactive-item w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold hover:opacity-90 transition-opacity shadow-[0_0_20px_rgba(124,58,237,0.3)] active:scale-95">
+                            INITIATE SWAP
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW: MARKETS (NEW) -->
+        <div id="view-markets" class="hidden">
+            <div class="glass-panel rounded-2xl p-6">
+                <h2 class="text-2xl font-bold text-white mb-6 neon-glow-text">Live Market Data</h2>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="text-gray-500 text-xs uppercase tracking-wider border-b border-white/10">
+                                <th class="p-4">Asset</th>
+                                <th class="p-4">Price</th>
+                                <th class="p-4">24h Change</th>
+                                <th class="p-4">24h Volume</th>
+                                <th class="p-4">Market Cap</th>
+                                <th class="p-4">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody class="text-sm font-mono" id="market-table-body">
+                            <!-- JS Populated -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW: EXCHANGE (NEW) -->
+        <div id="view-exchange" class="hidden grid grid-cols-1 md:grid-cols-12 gap-6">
+             <!-- Order Book -->
+             <div class="md:col-span-4 glass-panel rounded-2xl p-4 flex flex-col h-[600px]">
+                <h3 class="text-gray-400 text-xs font-bold uppercase mb-4 border-b border-white/5 pb-2">Order Book (BTC/USD)</h3>
+                <div class="flex-1 overflow-hidden flex flex-col gap-1">
+                    <div class="flex justify-between text-xs text-gray-500 px-2">
+                        <span>Price (USD)</span>
+                        <span>Amount (BTC)</span>
+                        <span>Total</span>
+                    </div>
+                    <!-- Asks (Red) -->
+                    <div class="flex-1 flex flex-col justify-end gap-[1px] overflow-hidden" id="orderbook-asks">
+                        <!-- JS Generated -->
+                    </div>
+                    
+                    <div class="py-3 text-center text-xl font-bold text-white border-y border-white/10 my-2 neon-glow-text">
+                        48,291.50 <i class="ph-bold ph-arrow-up text-green-500 text-sm"></i>
+                    </div>
+
+                    <!-- Bids (Green) -->
+                    <div class="flex-1 flex flex-col gap-[1px] overflow-hidden" id="orderbook-bids">
+                        <!-- JS Generated -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts & Forms -->
+            <div class="md:col-span-8 flex flex-col gap-6">
+                <div class="glass-panel rounded-2xl h-[400px] flex items-center justify-center border border-white/10 bg-black/40">
+                     <div class="text-center">
+                        <i class="ph-duotone ph-chart-line-up text-6xl text-cyan-500/50 mb-4"></i>
+                        <p class="text-gray-400">Pro Charting Module</p>
+                        <p class="text-xs text-gray-600">Visualization Placeholder</p>
+                     </div>
+                </div>
+                <div class="grid grid-cols-2 gap-6">
+                    <div class="glass-panel rounded-2xl p-6 bg-green-500/5 border-green-500/20">
+                        <h3 class="text-green-400 font-bold mb-4">BUY BTC</h3>
+                        <div class="space-y-4">
+                            <div class="bg-black/40 p-3 rounded border border-white/5 flex justify-between">
+                                <span class="text-gray-500 text-xs">Price</span>
+                                <span class="font-mono text-white">48,291.50</span>
+                            </div>
+                            <div class="bg-black/40 p-3 rounded border border-white/5 flex justify-between">
+                                <span class="text-gray-500 text-xs">Amount</span>
+                                <input type="number" placeholder="0.00" class="bg-transparent text-right text-white w-20 focus:outline-none font-mono">
+                            </div>
+                            <button class="w-full py-3 bg-green-600 hover:bg-green-500 text-white font-bold rounded shadow-[0_0_15px_rgba(34,197,94,0.3)] interactive-item">BUY LONG</button>
+                        </div>
+                    </div>
+                    <div class="glass-panel rounded-2xl p-6 bg-red-500/5 border-red-500/20">
+                        <h3 class="text-red-400 font-bold mb-4">SELL BTC</h3>
+                        <div class="space-y-4">
+                            <div class="bg-black/40 p-3 rounded border border-white/5 flex justify-between">
+                                <span class="text-gray-500 text-xs">Price</span>
+                                <span class="font-mono text-white">48,291.50</span>
+                            </div>
+                            <div class="bg-black/40 p-3 rounded border border-white/5 flex justify-between">
+                                <span class="text-gray-500 text-xs">Amount</span>
+                                <input type="number" placeholder="0.00" class="bg-transparent text-right text-white w-20 focus:outline-none font-mono">
+                            </div>
+                            <button class="w-full py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded shadow-[0_0_15px_rgba(239,68,68,0.3)] interactive-item">SELL SHORT</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer / Status Bar -->
+    <footer class="border-t border-white/5 bg-black/60 backdrop-blur-sm py-2 px-6 flex justify-between items-center text-xs font-mono text-gray-600">
+        <div class="flex items-center gap-4">
+            <span class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                SYSTEM ONLINE
+            </span>
+            <span>LATENCY: 12ms</span>
+        </div>
+        <div class="hidden md:block">
+            BLOCK: #18,293,002 &nbsp;|&nbsp; GAS: 24 Gwei
+        </div>
+    </footer>
+
+    <script>
+        // ... Audio Engine (existing code, kept same) ...
+        class AudioEngine {
+            constructor() {
+                this.ctx = null;
+                this.enabled = false;
+                this.masterGain = null;
+            }
+            init() {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                this.ctx = new AudioContext();
+                this.masterGain = this.ctx.createGain();
+                this.masterGain.gain.value = 0.3;
+                this.masterGain.connect(this.ctx.destination);
+                this.enabled = true;
+                this.playStartup();
+            }
+            toggle() {
+                if (!this.ctx) { this.init(); return true; }
+                if (this.ctx.state === 'suspended') { this.ctx.resume(); this.enabled = true; } 
+                else { this.ctx.suspend(); this.enabled = false; }
+                return this.enabled;
+            }
+            playHover() {
+                if (!this.enabled) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(1200, this.ctx.currentTime + 0.05);
+                gain.gain.setValueAtTime(0.05, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.05);
+                osc.connect(gain);
+                gain.connect(this.masterGain);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.05);
+            }
+            playClick() {
+                if (!this.enabled) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
+                gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.2);
+                osc.connect(gain);
+                gain.connect(this.masterGain);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.2);
+            }
+            playStartup() {
+                const t = this.ctx.currentTime;
+                const osc1 = this.ctx.createOscillator();
+                const g1 = this.ctx.createGain();
+                osc1.frequency.setValueAtTime(220, t);
+                osc1.frequency.exponentialRampToValueAtTime(880, t + 0.5);
+                g1.gain.setValueAtTime(0, t);
+                g1.gain.linearRampToValueAtTime(0.2, t + 0.1);
+                g1.gain.exponentialRampToValueAtTime(0.001, t + 1);
+                osc1.connect(g1);
+                g1.connect(this.masterGain);
+                osc1.start(t);
+                osc1.stop(t + 1);
+            }
+            playSuccess() {
+                if (!this.enabled) return;
+                const t = this.ctx.currentTime;
+                [440, 554, 659, 880].forEach((freq, i) => {
+                    const osc = this.ctx.createOscillator();
+                    const g = this.ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.value = freq;
+                    g.gain.setValueAtTime(0.05, t + i*0.05);
+                    g.gain.exponentialRampToValueAtTime(0.001, t + i*0.05 + 0.3);
+                    osc.connect(g);
+                    g.connect(this.masterGain);
+                    osc.start(t + i*0.05);
+                    osc.stop(t + i*0.05 + 0.3);
+                });
+            }
+        }
+
+        const audio = new AudioEngine();
+
+        /**
+         * APPLICATION STATE & LOGIC
+         */
+        const app = {
+            state: {
+                view: 'dashboard',
+                balances: {
+                    btc: 0.4521,
+                    eth: 14.203,
+                    sol: 450.00,
+                    xrp: 12000,
+                    usdt: 3400.50
+                },
+                prices: {
+                    btc: 48291.00,
+                    eth: 3045.20,
+                    sol: 108.45,
+                    xrp: 0.65,
+                    usdt: 1.00
+                }
+            },
+
+            init() {
+                this.renderAssetList();
+                this.updateTotalBalance();
+                this.renderMarkets();
+                this.renderOrderBook();
+                this.bindEvents();
+            },
+
+            switchView(viewId) {
+                // Update Audio
+                audio.playClick();
+
+                // Update CSS Classes
+                document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+                document.getElementById(`view-${viewId}`).classList.remove('hidden');
+                
+                // Update Nav
+                document.querySelectorAll('nav button').forEach(btn => btn.classList.remove('nav-active'));
+                document.getElementById(`nav-${viewId}`).classList.add('nav-active');
+            },
+
+            deposit() {
+                audio.playClick();
+                alert("DEPOSIT SYSTEM: Generate Deposit Address..."); 
+                // In real app, show modal
+            },
+
+            getAssetIcon(symbol) {
+                const map = {
+                    'btc': { icon: 'ph-currency-btc', color: 'text-orange-500', bg: 'bg-orange-500/20' },
+                    'eth': { icon: 'ph-currency-eth', color: 'text-indigo-400', bg: 'bg-indigo-500/20' },
+                    'sol': { icon: 'ph-planet', color: 'text-pink-500', bg: 'bg-pink-500/20' },
+                    'xrp': { icon: 'ph-waves', color: 'text-blue-500', bg: 'bg-blue-500/20' },
+                    'usdt': { icon: 'ph-currency-dollar', color: 'text-green-500', bg: 'bg-green-500/20' }
+                };
+                return map[symbol] || map['btc'];
+            },
+
+            renderAssetList() {
+                const container = document.getElementById('asset-list-container');
+                container.innerHTML = '';
+                
+                Object.entries(this.state.balances).forEach(([symbol, amount]) => {
+                    const style = this.getAssetIcon(symbol);
+                    const value = amount * (this.state.prices[symbol] || 0);
+                    
+                    const html = `
+                    <div class="interactive-row p-3 rounded-lg flex items-center justify-between group transition-all" onmouseenter="audio.playHover()">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-full ${style.bg} flex items-center justify-center ${style.color}">
+                                <i class="ph-fill ${style.icon}"></i>
+                            </div>
+                            <div>
+                                <div class="text-sm font-bold text-gray-200 uppercase">${symbol}</div>
+                                <div class="text-xs text-gray-500 font-mono">Token</div>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-sm font-mono text-white">${amount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 4})}</div>
+                            <div class="text-xs text-cyan-400 font-mono">$${value.toLocaleString(undefined, {maximumFractionDigits: 2})}</div>
+                        </div>
+                    </div>`;
+                    container.innerHTML += html;
+                });
+                
+                // Update Swap UI Text
+                document.getElementById('swap-eth-bal').innerText = `Bal: ${this.state.balances.eth.toFixed(4)}`;
+            },
+
+            updateTotalBalance() {
+                let total = 0;
+                Object.entries(this.state.balances).forEach(([symbol, amount]) => {
+                    total += amount * (this.state.prices[symbol] || 0);
+                });
+                document.getElementById('total-balance-display').innerHTML = `$${total.toLocaleString(undefined, {maximumFractionDigits: 2})}`;
+            },
+
+            renderMarkets() {
+                const tbody = document.getElementById('market-table-body');
+                const coins = [
+                    { s: 'BTC', n: 'Bitcoin', p: 48291, c: 2.4, v: '28B', m: '920B' },
+                    { s: 'ETH', n: 'Ethereum', p: 3045, c: -1.2, v: '15B', m: '360B' },
+                    { s: 'SOL', n: 'Solana', p: 108, c: 5.6, v: '4B', m: '45B' },
+                    { s: 'XRP', n: 'Ripple', p: 0.65, c: 0.4, v: '1.2B', m: '35B' },
+                    { s: 'ADA', n: 'Cardano', p: 0.55, c: -0.5, v: '800M', m: '19B' },
+                    { s: 'DOT', n: 'Polkadot', p: 7.20, c: 1.1, v: '400M', m: '9B' },
+                ];
+
+                tbody.innerHTML = coins.map(c => `
+                    <tr class="border-b border-white/5 hover:bg-white/5 transition-colors interactive-row" onmouseenter="audio.playHover()">
+                        <td class="p-4 flex items-center gap-3">
+                            <span class="font-bold text-white">${c.s}</span>
+                            <span class="text-xs text-gray-500">${c.n}</span>
+                        </td>
+                        <td class="p-4 font-mono text-white">$${c.p.toLocaleString()}</td>
+                        <td class="p-4 font-mono ${c.c >= 0 ? 'text-green-400' : 'text-red-400'}">${c.c > 0 ? '+' : ''}${c.c}%</td>
+                        <td class="p-4 text-gray-400 text-sm">$${c.v}</td>
+                        <td class="p-4 text-gray-400 text-sm">$${c.m}</td>
+                        <td class="p-4">
+                            <button class="px-3 py-1 text-xs rounded border border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10">TRADE</button>
+                        </td>
+                    </tr>
+                `).join('');
+            },
+
+            renderOrderBook() {
+                const generateRow = (type, price, amt) => {
+                    const width = Math.floor(Math.random() * 80) + 10;
+                    const color = type === 'ask' ? 'bg-red-500' : 'bg-green-500';
+                    return `
+                    <div class="flex justify-between items-center text-xs py-[2px] px-2 relative hover:bg-white/5 cursor-pointer">
+                        <div class="absolute top-0 ${type === 'ask' ? 'right-0' : 'right-0'} h-full ${color} opacity-10" style="width: ${width}%"></div>
+                        <span class="${type === 'ask' ? 'text-red-400' : 'text-green-400'} font-mono z-10">${price.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                        <span class="text-gray-300 font-mono z-10">${amt.toFixed(4)}</span>
+                        <span class="text-gray-500 font-mono z-10">${(price*amt).toFixed(0)}</span>
+                    </div>`;
+                };
+
+                const asks = document.getElementById('orderbook-asks');
+                const bids = document.getElementById('orderbook-bids');
+                
+                let htmlAsks = '';
+                for(let i=0; i<8; i++) {
+                    htmlAsks += generateRow('ask', 48300 + (i*15) + Math.random()*10, Math.random()*2);
+                }
+                // Reverse asks to show lowest at bottom
+                asks.innerHTML = htmlAsks.split('</div>').reverse().join('</div>'); 
+
+                let htmlBids = '';
+                for(let i=0; i<8; i++) {
+                    htmlBids += generateRow('bid', 48280 - (i*15) - Math.random()*10, Math.random()*2);
+                }
+                bids.innerHTML = htmlBids;
+            },
+
+            bindEvents() {
+                // Swap Calculation Logic
+                const ethInput = document.getElementById('swap-amount-input');
+                const usdtOutput = document.getElementById('swap-to-amount');
+                
+                ethInput.addEventListener('input', (e) => {
+                    const val = parseFloat(e.target.value) || 0;
+                    usdtOutput.value = (val * this.state.prices.eth).toFixed(2);
+                });
+
+                // Audio Toggle (Already defined globally, but we ensure listeners exist)
+                const audioBtn = document.getElementById('audio-toggle');
+                const audioIcon = document.getElementById('audio-icon');
+                audioBtn.onclick = () => {
+                    const isEnabled = audio.toggle();
+                    if (isEnabled) {
+                        audioIcon.classList.replace('ph-speaker-slash', 'ph-speaker-high');
+                        audioIcon.classList.add('text-cyan-400');
+                        audioBtn.classList.add('border-cyan-500', 'bg-cyan-500/10');
+                    } else {
+                        audioIcon.classList.replace('ph-speaker-high', 'ph-speaker-slash');
+                        audioIcon.classList.remove('text-cyan-400');
+                        audioBtn.classList.remove('border-cyan-500', 'bg-cyan-500/10');
+                    }
+                };
+
+                // Swap Execution
+                document.getElementById('swap-btn').addEventListener('click', function() {
+                    const btn = this;
+                    const originalText = btn.innerText;
+                    const amt = parseFloat(ethInput.value);
+                    
+                    if(amt > app.state.balances.eth) {
+                        alert("Insufficient ETH Balance!");
+                        return;
+                    }
+
+                    // Simulate process
+                    btn.innerText = "PROCESSING...";
+                    btn.classList.add('animate-pulse');
+                    
+                    setTimeout(() => {
+                        audio.playSuccess();
+                        
+                        // Update State
+                        app.state.balances.eth -= amt;
+                        app.state.balances.usdt += (amt * app.state.prices.eth);
+                        app.renderAssetList();
+                        app.updateTotalBalance();
+
+                        btn.innerText = "SWAP COMPLETE";
+                        btn.classList.remove('animate-pulse');
+                        btn.classList.replace('from-purple-600', 'from-green-600');
+                        btn.classList.replace('to-blue-600', 'to-emerald-600');
+                        
+                        setTimeout(() => {
+                            btn.innerText = originalText;
+                            btn.classList.replace('from-green-600', 'from-purple-600');
+                            btn.classList.replace('to-emerald-600', 'to-blue-600');
+                        }, 2000);
+                    }, 1500);
+                });
+            }
+        };
+
+        // Start App
+        app.init();
+
+
+        /**
+         * CHART.JS SETUP
+         */
+        const ctx = document.getElementById('mainChart').getContext('2d');
+        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+        gradient.addColorStop(0, 'rgba(0, 243, 255, 0.5)');
+        gradient.addColorStop(1, 'rgba(0, 243, 255, 0.0)');
+
+        const mainChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: ['10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00'],
+                datasets: [{
+                    label: 'Bitcoin Price',
+                    data: [47500, 47800, 47200, 48100, 47900, 48500, 48291],
+                    borderColor: '#00f3ff',
+                    backgroundColor: gradient,
+                    borderWidth: 2,
+                    pointBackgroundColor: '#050505',
+                    pointBorderColor: '#fff',
+                    pointHoverBackgroundColor: '#00f3ff',
+                    pointHoverBorderColor: '#fff',
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { intersect: false, mode: 'index' },
+                plugins: { legend: { display: false }, tooltip: { backgroundColor: 'rgba(5, 5, 5, 0.9)', titleColor: '#fff', bodyColor: '#ccc', borderColor: 'rgba(255, 255, 255, 0.1)', borderWidth: 1, padding: 10, displayColors: false } },
+                scales: { x: { grid: { color: 'rgba(255, 255, 255, 0.05)', drawBorder: false }, ticks: { color: '#666' } }, y: { grid: { color: 'rgba(255, 255, 255, 0.05)', drawBorder: false }, ticks: { color: '#666' } } }
+            }
+        });
+
+        setInterval(() => {
+            const data = mainChart.data.datasets[0].data;
+            const lastVal = data[data.length - 1];
+            const change = (Math.random() - 0.5) * 200;
+            const newVal = lastVal + change;
+            data.shift();
+            data.push(newVal);
+            mainChart.update('none');
+        }, 2000);
+
+    </script>
+</body>
+</html>
