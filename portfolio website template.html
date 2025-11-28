@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gaurav // Creative Web Designer</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Syne', 'sans-serif'],
+                    },
+                    colors: {
+                        dark: '#050505',
+                        primary: '#6366f1', // Indigo
+                        accent: '#d946ef',  // Fuchsia
+                        glass: 'rgba(255, 255, 255, 0.03)',
+                        glassBorder: 'rgba(255, 255, 255, 0.08)',
+                    },
+                    animation: {
+                        'float': 'float 8s ease-in-out infinite', // Slower, smoother float
+                        'spin-slow': 'spin 20s linear infinite',
+                        'pulse-glow': 'pulse-glow 4s infinite',
+                    },
+                    keyframes: {
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-20px)' },
+                        },
+                        'pulse-glow': {
+                            '0%, 100%': { opacity: 0.5, boxShadow: '0 0 10px rgba(99, 102, 241, 0.2)' },
+                            '50%': { opacity: 1, boxShadow: '0 0 20px rgba(99, 102, 241, 0.5)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- GSAP -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+
+    <style>
+        body {
+            background-color: #050505;
+            color: #ffffff;
+            overflow-x: hidden;
+            cursor: none; /* Hide default cursor */
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #050505;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #2a2a2a;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6366f1;
+        }
+
+        /* Glassmorphism Utilities - Refined for smoother look */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.02);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.03);
+        }
+        
+        .glass-card {
+            background: linear-gradient(145deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.005) 100%);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            transition: all 0.6s cubic-bezier(0.19, 1, 0.22, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .glass-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+            transition: 0.6s;
+        }
+
+        .glass-card:hover::before {
+            left: 100%;
+        }
+
+        .glass-card:hover {
+            transform: translateY(-8px) scale(1.02);
+            border-color: rgba(99, 102, 241, 0.3);
+            box-shadow: 0 20px 40px -15px rgba(99, 102, 241, 0.15);
+        }
+
+        /* Custom Cursor */
+        .cursor-dot,
+        .cursor-outline {
+            position: fixed;
+            top: 0;
+            left: 0;
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
+            z-index: 9999;
+            pointer-events: none;
+        }
+
+        .cursor-dot {
+            width: 8px;
+            height: 8px;
+            background-color: #6366f1;
+        }
+
+        .cursor-outline {
+            width: 40px;
+            height: 40px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            transition: width 0.2s, height 0.2s, background-color 0.2s, border-color 0.2s;
+        }
+
+        body:hover .cursor-outline {
+            opacity: 1;
+        }
+        
+        /* Hover State for Cursor */
+        body.hovering .cursor-outline {
+            width: 60px;
+            height: 60px;
+            background-color: rgba(99, 102, 241, 0.1);
+            border-color: rgba(99, 102, 241, 0.5);
+            backdrop-filter: blur(2px);
+        }
+
+        /* ThreeJS Canvas */
+        #bg-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            opacity: 0.5;
+        }
+
+        /* Loader */
+        .loader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #050505;
+            z-index: 100;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        
+        .loader-bar {
+            width: 200px;
+            height: 2px;
+            background: rgba(255,255,255,0.05);
+            margin-top: 20px;
+            position: relative;
+            overflow: hidden;
+            border-radius: 4px;
+        }
+        
+        .loader-progress {
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #6366f1, #d946ef);
+            animation: load 1.5s ease-in-out forwards;
+        }
+        
+        @keyframes load {
+            0% { width: 0%; }
+            100% { width: 100%; }
+        }
+
+        /* Magnetic Button Effect */
+        .btn-magnetic {
+            transition: transform 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+        }
+    </style>
+</head>
+<body class="antialiased selection:bg-indigo-500 selection:text-white">
+
+    <!-- Custom Cursor -->
+    <div class="cursor-dot hidden md:block"></div>
+    <div class="cursor-outline hidden md:block"></div>
+
+    <!-- Loading Screen -->
+    <div class="loader" id="loader">
+        <h1 class="font-display text-5xl font-bold tracking-tighter">Gaurav<span class="text-indigo-500">.</span></h1>
+        <div class="loader-bar">
+            <div class="loader-progress"></div>
+        </div>
+    </div>
+
+    <!-- 3D Background -->
+    <canvas id="bg-canvas"></canvas>
+
+    <!-- Navigation -->
+    <nav class="fixed w-full z-50 top-0 transition-all duration-500 ease-out" id="navbar">
+        <div class="max-w-7xl mx-auto px-6 py-8 flex justify-between items-center">
+            <a href="#" class="hoverable font-display text-2xl font-bold tracking-tighter z-50 relative mix-blend-difference">
+                Gaurav<span class="text-indigo-500">.</span>
+            </a>
+            
+            <!-- Desktop Menu -->
+            <div class="hidden md:flex gap-10 items-center bg-white/5 backdrop-blur-2xl px-10 py-4 rounded-full border border-white/5 shadow-2xl shadow-black/20">
+                <a href="#about" class="hoverable text-[11px] uppercase font-semibold tracking-[0.2em] hover:text-indigo-400 transition-colors duration-300">About</a>
+                <a href="#services" class="hoverable text-[11px] uppercase font-semibold tracking-[0.2em] hover:text-indigo-400 transition-colors duration-300">Services</a>
+                <a href="#skills" class="hoverable text-[11px] uppercase font-semibold tracking-[0.2em] hover:text-indigo-400 transition-colors duration-300">Skills</a>
+                <a href="#certificates" class="hoverable text-[11px] uppercase font-semibold tracking-[0.2em] hover:text-indigo-400 transition-colors duration-300">Certificat</a>
+            </div>
+
+            <a href="mailto:gauravmakwanaofficial@gmail.com" class="hoverable btn-magnetic hidden md:inline-flex bg-white text-black px-8 py-3 rounded-full font-bold text-sm tracking-wide hover:bg-indigo-500 hover:text-white transition-all duration-500 transform hover:scale-105 shadow-[0_0_20px_rgba(255,255,255,0.1)]">
+                Let's Talk
+            </a>
+
+            <!-- Mobile Toggle -->
+            <button class="md:hidden text-2xl z-50 relative hoverable" id="menu-btn">
+                <i class="fas fa-bars"></i>
+            </button>
+        </div>
+
+        <!-- Mobile Menu Overlay -->
+        <div class="fixed inset-0 bg-black/95 backdrop-blur-xl z-40 transform translate-x-full transition-transform duration-700 cubic-bezier(0.7, 0, 0.3, 1) flex flex-col justify-center items-center gap-10 md:hidden" id="mobile-menu">
+            <a href="#about" class="font-display text-4xl hover:text-indigo-500 mobile-link transition-colors duration-300">About</a>
+            <a href="#services" class="font-display text-4xl hover:text-indigo-500 mobile-link transition-colors duration-300">Services</a>
+            <a href="#skills" class="font-display text-4xl hover:text-indigo-500 mobile-link transition-colors duration-300">Skills</a>
+            <a href="#certificates" class="font-display text-4xl hover:text-indigo-500 mobile-link transition-colors duration-300">Awards</a>
+            <a href="mailto:hello@Gaurav.design" class="font-display text-2xl text-indigo-400 mt-8 mobile-link">hello@Gaurav.design</a>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="min-h-screen flex items-center justify-center relative px-6 pt-20 overflow-hidden">
+        <!-- Abstract Decoration -->
+        <div class="absolute top-1/4 -right-20 w-[500px] h-[500px] bg-indigo-600/10 rounded-full blur-[150px] pointer-events-none animate-pulse-glow"></div>
+        <div class="absolute bottom-0 -left-20 w-[500px] h-[500px] bg-purple-600/10 rounded-full blur-[150px] pointer-events-none animate-pulse-glow" style="animation-delay: 2s"></div>
+
+        <div class="max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+            <div class="lg:col-span-8 z-10 hero-content">
+                <div class="inline-flex items-center gap-3 px-5 py-2 mb-10 rounded-full border border-indigo-500/20 bg-indigo-500/5 backdrop-blur-md">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span class="text-indigo-200 text-[10px] font-bold tracking-[0.25em] uppercase">Available for freelance</span>
+                </div>
+                
+                <h1 class="font-display text-6xl md:text-8xl lg:text-9xl font-bold leading-[0.9] mb-8 tracking-tighter">
+                    Creative <br>
+                    <span class="relative inline-block">
+                        <span class="relative z-10 text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-purple-300 to-pink-300">Web</span>
+                        <svg class="absolute w-full h-3 -bottom-1 left-0 text-indigo-500 opacity-40" viewBox="0 0 100 10" preserveAspectRatio="none">
+                            <path d="M0 5 Q 50 10 100 5" stroke="currentColor" stroke-width="2" fill="none" />
+                        </svg>
+                    </span>
+                    Designer
+                </h1>
+                
+                <p class="text-gray-400 text-lg md:text-xl max-w-2xl mb-12 leading-relaxed font-light border-l border-indigo-500/30 pl-8">
+                    Crafting immersive digital experiences that blend artistic vision with technical precision. Specializing in UI/UX, Creative Branding, and Interactive Web Design.
+                </p>
+                
+                <div class="flex flex-wrap gap-6">
+                    <a href="#services" class="hoverable btn-magnetic group relative px-10 py-5 bg-white text-black rounded-full font-bold overflow-hidden shadow-[0_0_30px_rgba(255,255,255,0.1)] hover:shadow-[0_0_40px_rgba(99,102,241,0.4)] transition-shadow duration-500">
+                        <span class="relative z-10 group-hover:text-white transition-colors duration-300 flex items-center gap-3">
+                            Explore Expertise <i class="fas fa-arrow-down group-hover:translate-y-1 transition-transform duration-300"></i>
+                        </span>
+                        <div class="absolute inset-0 bg-black transform scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-500 ease-out"></div>
+                    </a>
+                    <a href="mailto:gauravmakwanaofficial@gmail.com" class="hoverable btn-magnetic px-10 py-5 border border-white/10 rounded-full font-bold hover:bg-white/5 transition-all flex items-center gap-3 backdrop-blur-sm group">
+                        Email Me <i class="fas fa-envelope text-xs group-hover:-rotate-12 transition-transform"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="absolute bottom-10 left-1/2 transform -translate-x-1/2 animate-bounce opacity-30">
+            <i class="fas fa-chevron-down text-2xl"></i>
+        </div>
+    </section>
+
+    <!-- About Section -->
+    <section id="about" class="py-40 relative">
+        <div class="max-w-7xl mx-auto px-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-24 items-center">
+                <div class="relative group reveal-left">
+                    <div class="absolute -inset-6 bg-gradient-to-tr from-indigo-500/20 to-purple-600/20 rounded-[2rem] opacity-0 group-hover:opacity-100 blur-2xl transition-opacity duration-1000"></div>
+                    <div class="relative aspect-[3/4] rounded-[2rem] overflow-hidden bg-gray-900/50 border border-white/5 group-hover:border-white/10 transition-colors duration-500">
+                        <img src="https://gauravmakwana9.rf.gd/assets/img/perfil.png" alt="Portrait" class="w-full h-full object-cover grayscale opacity-80 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-1000 transform group-hover:scale-105">
+                    </div>
+                    
+                    <!-- Floating Experience Badge -->
+                    <!-- <div class="absolute -bottom-10 -right-10 bg-black/40 backdrop-blur-2xl text-white p-10 rounded-full shadow-2xl border border-white/10 animate-float z-20">
+                        <p class="font-display text-6xl font-bold text-indigo-400 leading-none">5+</p>
+                        <p class="text-[10px] font-bold uppercase tracking-widest text-center mt-2 text-gray-400">Years Exp.</p>
+                    </div> -->
+                </div>
+
+                <div class="reveal-right">
+                    <span class="text-indigo-400 font-bold tracking-[0.2em] uppercase mb-6 block text-xs">About Me</span>
+                    <h2 class="font-display text-5xl md:text-7xl font-bold mb-10 leading-[1.1]">Redefining <br>Digital <span class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">Boundaries</span></h2>
+                    
+                    <div class="space-y-6 text-lg text-gray-400 font-light leading-relaxed">
+                        <p>
+                            I am a multidisciplinary designer based in the Digital Space. My passion lies in creating digital products that not only look beautiful but also function seamlessly. I bridge the gap between design and engineering to build products that scale.
+                        </p>
+                        <p>
+                            Obsessed with grid systems, typography, and micro-interactions. My goal is to help brands stand out in the noisy digital landscape through bold and strategic design.
+                        </p>
+                    </div>
+
+                    <!-- Stats Grid -->
+                    <!-- <div class="grid grid-cols-2 gap-6 mt-12">
+                        <div class="hoverable glass-card p-8 rounded-3xl group">
+                            <div class="flex items-center justify-between mb-4">
+                                <i class="lucide-award text-indigo-400 text-3xl group-hover:scale-110 transition-transform duration-300"></i>
+                                <i class="fas fa-arrow-right -rotate-45 text-white/20 group-hover:text-white transition-colors"></i>
+                            </div>
+                            <h3 class="font-display font-bold text-4xl mb-1">12</h3>
+                            <p class="text-[10px] text-gray-500 uppercase font-bold tracking-widest">Awards Won</p>
+                        </div>
+                        <div class="hoverable glass-card p-8 rounded-3xl group">
+                             <div class="flex items-center justify-between mb-4">
+                                <i class="lucide-briefcase text-purple-400 text-3xl group-hover:scale-110 transition-transform duration-300"></i>
+                                <i class="fas fa-arrow-right -rotate-45 text-white/20 group-hover:text-white transition-colors"></i>
+                            </div>
+                            <h3 class="font-display font-bold text-4xl mb-1">45+</h3>
+                            <p class="text-[10px] text-gray-500 uppercase font-bold tracking-widest">Projects Done</p>
+                        </div>
+                    </div> -->
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Services Section -->
+    <!-- <section id="services" class="py-32 bg-gradient-to-b from-transparent via-white/[0.02] to-transparent">
+        <div class="max-w-7xl mx-auto px-6">
+            <div class="text-center mb-24 reveal-up">
+                <span class="text-indigo-400 font-bold tracking-[0.2em] uppercase mb-4 block text-xs">My Expertise</span>
+                <h2 class="font-display text-5xl md:text-7xl font-bold">Creative Services</h2>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8"> -->
+                <!-- Service 1 -->
+                <!-- <div class="hoverable glass-card p-12 rounded-[2rem] group reveal-up">
+                    <div class="w-20 h-20 rounded-2xl bg-indigo-500/10 flex items-center justify-center mb-10 group-hover:bg-indigo-500 group-hover:scale-110 transition-all duration-500">
+                        <i class="lucide-palette text-indigo-400 group-hover:text-white text-4xl transition-colors"></i>
+                    </div>
+                    <h3 class="font-display text-3xl font-bold mb-6 group-hover:translate-x-2 transition-transform">UI/UX Design</h3>
+                    <p class="text-gray-400 text-base leading-relaxed mb-10 border-b border-white/5 pb-10 group-hover:border-white/10 transition-colors">
+                        Creating intuitive and engaging user interfaces for web and mobile applications focused on conversion and aesthetics.
+                    </p>
+                    <ul class="text-gray-500 text-sm space-y-4">
+                        <li class="flex items-center gap-4"><span class="w-1.5 h-1.5 bg-indigo-500 rounded-full shadow-[0_0_10px_currentColor]"></span> Wireframing & Prototyping</li>
+                        <li class="flex items-center gap-4"><span class="w-1.5 h-1.5 bg-indigo-500 rounded-full shadow-[0_0_10px_currentColor]"></span> User Research</li>
+                        <li class="flex items-center gap-4"><span class="w-1.5 h-1.5 bg-indigo-500 rounded-full shadow-[0_0_10px_currentColor]"></span> Design Systems</li>
+                    </ul>
+                </div> -->
+
+                <!-- Service 2 -->
+                <!-- <div class="hoverable glass-card p-12 rounded-[2rem] group reveal-up" style="transition-delay: 100ms;">
+                    <div class="w-20 h-20 rounded-2xl bg-pink-500/10 flex items-center justify-center mb-10 group-hover:bg-pink-500 group-hover:scale-110 transition-all duration-500">
+                        <i class="lucide-code text-pink-400 group-hover:text-white text-4xl transition-colors"></i>
+                    </div>
+                    <h3 class="font-display text-3xl font-bold mb-6 group-hover:translate-x-2 transition-transform">Creative Dev</h3>
+                    <p class="text-gray-400 text-base leading-relaxed mb-10 border-b border-white/5 pb-10 group-hover:border-white/10 transition-colors">
+                        Building responsive, fast, and SEO-friendly websites using modern frameworks, clean code, and interactive elements.
+                    </p>
+                    <ul class="text-gray-500 text-sm space-y-4">
+                        <li class="flex items-center gap-4"><span class="w-1.5 h-1.5 bg-pink-500 rounded-full shadow-[0_0_10px_currentColor]"></span> React / Vue / Next.js</li>
+                        <li class="flex items-center gap-4"><span class="w-1.5 h-1.5 bg-pink-500 rounded-full shadow-[0_0_10px_currentColor]"></span> WebGL / Three.js</li>
+                        <li class="flex items-center gap-4"><span class="w-1.5 h-1.5 bg-pink-500 rounded-full shadow-[0_0_10px_currentColor]"></span> Interactive Animation</li>
+                    </ul>
+                </div> -->
+
+                <!-- Service 3 -->
+                <!-- <div class="hoverable glass-card p-12 rounded-[2rem] group reveal-up" style="transition-delay: 200ms;">
+                    <div class="w-20 h-20 rounded-2xl bg-cyan-500/10 flex items-center justify-center mb-10 group-hover:bg-cyan-500 group-hover:scale-110 transition-all duration-500">
+                        <i class="lucide-zap text-cyan-400 group-hover:text-white text-4xl transition-colors"></i>
+                    </div>
+                    <h3 class="font-display text-3xl font-bold mb-6 group-hover:translate-x-2 transition-transform">Brand Identity</h3>
+                    <p class="text-gray-400 text-base leading-relaxed mb-10 border-b border-white/5 pb-10 group-hover:border-white/10 transition-colors">
+                        Developing cohesive visual systems that tell your brand's story and connect deeply with your target audience.
+                    </p>
+                    <ul class="text-gray-500 text-sm space-y-4">
+                        <li class="flex items-center gap-4"><span class="w-1.5 h-1.5 bg-cyan-500 rounded-full shadow-[0_0_10px_currentColor]"></span> Logo Design</li>
+                        <li class="flex items-center gap-4"><span class="w-1.5 h-1.5 bg-cyan-500 rounded-full shadow-[0_0_10px_currentColor]"></span> Brand Guidelines</li>
+                        <li class="flex items-center gap-4"><span class="w-1.5 h-1.5 bg-cyan-500 rounded-full shadow-[0_0_10px_currentColor]"></span> Social Assets</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section> -->
+
+    <!-- Skills Section -->
+    <section id="skills" class="py-32 relative overflow-hidden">
+        <div class="max-w-7xl mx-auto px-6">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-24">
+                <!-- Creative List -->
+                <div class="reveal-left">
+                    <h3 class="font-display text-3xl font-bold mb-12 flex items-center gap-4">
+                        <div class="w-2 h-8 bg-indigo-500 rounded-full"></div> Technical Arsenal
+                    </h3>
+                    <div class="space-y-6">
+                        <div class="hoverable glass-panel p-6 rounded-2xl flex items-center justify-between group hover:bg-white/5 transition-colors border border-white/5">
+                            <div class="flex items-center gap-5">
+                                <div class="w-12 h-12 rounded-xl bg-black flex items-center justify-center text-2xl text-pink-400 group-hover:scale-110 transition-transform"><i class="fab fa-figma"></i></div>
+                                <span class="font-bold text-xl tracking-tight">Figma</span>
+                            </div>
+                            <span class="text-[10px] font-bold uppercase tracking-widest text-green-400 bg-green-400/10 px-4 py-2 rounded-full border border-green-400/20">Mastery</span>
+                        </div>
+                        <div class="hoverable glass-panel p-6 rounded-2xl flex items-center justify-between group hover:bg-white/5 transition-colors border border-white/5">
+                            <div class="flex items-center gap-5">
+                                <div class="w-12 h-12 rounded-xl bg-black flex items-center justify-center text-2xl text-yellow-400 group-hover:scale-110 transition-transform"><i class="fab fa-js"></i></div>
+                                <span class="font-bold text-xl tracking-tight">JavaScript (ES6+)</span>
+                            </div>
+                            <span class="text-[10px] font-bold uppercase tracking-widest text-green-400 bg-green-400/10 px-4 py-2 rounded-full border border-green-400/20">Expert</span>
+                        </div>
+                        <div class="hoverable glass-panel p-6 rounded-2xl flex items-center justify-between group hover:bg-white/5 transition-colors border border-white/5">
+                            <div class="flex items-center gap-5">
+                                <div class="w-12 h-12 rounded-xl bg-black flex items-center justify-center text-2xl text-cyan-400 group-hover:scale-110 transition-transform"><i class="fab fa-react"></i></div>
+                                <span class="font-bold text-xl tracking-tight">React.js</span>
+                            </div>
+                            <span class="text-[10px] font-bold uppercase tracking-widest text-blue-400 bg-blue-400/10 px-4 py-2 rounded-full border border-blue-400/20">Advanced</span>
+                        </div>
+                         <div class="hoverable glass-panel p-6 rounded-2xl flex items-center justify-between group hover:bg-white/5 transition-colors border border-white/5">
+                            <div class="flex items-center gap-5">
+                                <div class="w-12 h-12 rounded-xl bg-black flex items-center justify-center text-2xl text-white group-hover:scale-110 transition-transform"><i class="fas fa-cube"></i></div>
+                                <span class="font-bold text-xl tracking-tight">Three.js / WebGL</span>
+                            </div>
+                            <span class="text-[10px] font-bold uppercase tracking-widest text-blue-400 bg-blue-400/10 px-4 py-2 rounded-full border border-blue-400/20">Advanced</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Animated Bars -->
+                <div class="reveal-right">
+                    <h3 class="font-display text-3xl font-bold mb-12 flex items-center gap-4">
+                        <div class="w-2 h-8 bg-pink-500 rounded-full"></div> Creative Stats
+                    </h3>
+                    <div class="space-y-12">
+                        <div class="group">
+                            <div class="flex justify-between mb-4">
+                                <span class="font-bold text-lg group-hover:text-indigo-400 transition-colors">Visual Design</span>
+                                <span class="text-indigo-400 font-mono font-bold">98%</span>
+                            </div>
+                            <div class="h-2 bg-white/5 rounded-full overflow-hidden">
+                                <div class="h-full bg-gradient-to-r from-indigo-600 to-indigo-400 w-[0%] animate-bar shadow-[0_0_15px_rgba(99,102,241,0.5)]" style="--w:98%"></div>
+                            </div>
+                        </div>
+                        <div class="group">
+                            <div class="flex justify-between mb-4">
+                                <span class="font-bold text-lg group-hover:text-purple-400 transition-colors">Interaction</span>
+                                <span class="text-purple-400 font-mono font-bold">92%</span>
+                            </div>
+                            <div class="h-2 bg-white/5 rounded-full overflow-hidden">
+                                <div class="h-full bg-gradient-to-r from-purple-600 to-purple-400 w-[0%] animate-bar shadow-[0_0_15px_rgba(168,85,247,0.5)]" style="--w:92%"></div>
+                            </div>
+                        </div>
+                        <div class="group">
+                            <div class="flex justify-between mb-4">
+                                <span class="font-bold text-lg group-hover:text-pink-400 transition-colors">Motion Graphics</span>
+                                <span class="text-pink-400 font-mono font-bold">85%</span>
+                            </div>
+                            <div class="h-2 bg-white/5 rounded-full overflow-hidden">
+                                <div class="h-full bg-gradient-to-r from-pink-600 to-pink-400 w-[0%] animate-bar shadow-[0_0_15px_rgba(236,72,153,0.5)]" style="--w:85%"></div>
+                            </div>
+                        </div>
+                         <div class="group">
+                            <div class="flex justify-between mb-4">
+                                <span class="font-bold text-lg group-hover:text-cyan-400 transition-colors">User Research</span>
+                                <span class="text-cyan-400 font-mono font-bold">88%</span>
+                            </div>
+                            <div class="h-2 bg-white/5 rounded-full overflow-hidden">
+                                <div class="h-full bg-gradient-to-r from-cyan-600 to-cyan-400 w-[0%] animate-bar shadow-[0_0_15px_rgba(34,211,238,0.5)]" style="--w:88%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Certifications Section -->
+    <section id="certificates" class="py-32 relative">
+        <div class="max-w-7xl mx-auto px-6">
+            <div class="flex flex-col md:flex-row justify-between items-end mb-20 reveal-up">
+                <div>
+                    <span class="text-indigo-400 font-bold tracking-[0.2em] uppercase mb-4 block text-xs">Recognitions</span>
+                    <h2 class="font-display text-4xl md:text-5xl font-bold">Certifications</h2>
+                </div>
+                <div class="hidden md:block w-40 h-px bg-white/20"></div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                <!-- Cert 1 -->
+                <div class="hoverable glass-card p-8 rounded-2xl group reveal-up border-t-2 border-t-transparent hover:border-t-indigo-500">
+                    <div class="flex justify-between items-start mb-8">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" alt="Google" class="w-8 h-8 opacity-60 group-hover:opacity-100 transition-opacity grayscale group-hover:grayscale-0">
+                        <span class="text-[10px] font-mono text-gray-500 border border-white/10 px-2 py-1 rounded">2023</span>
+                    </div>
+                    <h3 class="font-display font-bold text-xl leading-tight mb-2 group-hover:text-indigo-400 transition-colors">UX Design Professional</h3>
+                    <p class="text-xs text-gray-500 uppercase tracking-wider mb-6">Coursera</p>
+                    <div class="flex gap-2 flex-wrap">
+                        <span class="text-[10px] bg-white/5 px-2 py-1 rounded text-gray-400">UX Research</span>
+                        <span class="text-[10px] bg-white/5 px-2 py-1 rounded text-gray-400">Figma</span>
+                    </div>
+                </div>
+
+                <!-- Cert 2 -->
+                <div class="hoverable glass-card p-8 rounded-2xl group reveal-up border-t-2 border-t-transparent hover:border-t-yellow-500" style="transition-delay: 100ms;">
+                    <div class="flex justify-between items-start mb-8">
+                        <i class="fab fa-aws text-3xl text-gray-500 group-hover:text-yellow-500 transition-colors"></i>
+                        <span class="text-[10px] font-mono text-gray-500 border border-white/10 px-2 py-1 rounded">2022</span>
+                    </div>
+                    <h3 class="font-display font-bold text-xl leading-tight mb-2 group-hover:text-yellow-500 transition-colors">Front-End Developer</h3>
+                    <p class="text-xs text-gray-500 uppercase tracking-wider mb-6">AWS Certified</p>
+                    <div class="flex gap-2 flex-wrap">
+                        <span class="text-[10px] bg-white/5 px-2 py-1 rounded text-gray-400">React</span>
+                        <span class="text-[10px] bg-white/5 px-2 py-1 rounded text-gray-400">Cloud</span>
+                    </div>
+                </div>
+
+                <!-- Cert 3 -->
+                <div class="hoverable glass-card p-8 rounded-2xl group reveal-up border-t-2 border-t-transparent hover:border-t-red-500" style="transition-delay: 200ms;">
+                    <div class="flex justify-between items-start mb-8">
+                         <i class="fab fa-adobe text-3xl text-gray-500 group-hover:text-red-500 transition-colors"></i>
+                        <span class="text-[10px] font-mono text-gray-500 border border-white/10 px-2 py-1 rounded">2022</span>
+                    </div>
+                    <h3 class="font-display font-bold text-xl leading-tight mb-2 group-hover:text-red-500 transition-colors">Certified Expert</h3>
+                    <p class="text-xs text-gray-500 uppercase tracking-wider mb-6">Adobe</p>
+                    <div class="flex gap-2 flex-wrap">
+                        <span class="text-[10px] bg-white/5 px-2 py-1 rounded text-gray-400">Photoshop</span>
+                        <span class="text-[10px] bg-white/5 px-2 py-1 rounded text-gray-400">Illustrator</span>
+                    </div>
+                </div>
+
+                <!-- Cert 4 -->
+                <div class="hoverable glass-card p-8 rounded-2xl group reveal-up border-t-2 border-t-transparent hover:border-t-green-500" style="transition-delay: 300ms;">
+                    <div class="flex justify-between items-start mb-8">
+                         <div class="w-8 h-8 rounded-full border border-gray-500 flex items-center justify-center font-bold font-serif text-sm text-gray-500 group-hover:border-green-500 group-hover:text-green-500 transition-colors">W.</div>
+                        <span class="text-[10px] font-mono text-gray-500 border border-white/10 px-2 py-1 rounded">2024</span>
+                    </div>
+                    <h3 class="font-display font-bold text-xl leading-tight mb-2 group-hover:text-green-500 transition-colors">Honorable Mention</h3>
+                    <p class="text-xs text-gray-500 uppercase tracking-wider mb-6">Awwwards</p>
+                    <div class="flex gap-2 flex-wrap">
+                        <span class="text-[10px] bg-white/5 px-2 py-1 rounded text-gray-400">Design</span>
+                        <span class="text-[10px] bg-white/5 px-2 py-1 rounded text-gray-400">Creativity</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Testimonials -->
+    <section class="py-40 bg-gradient-to-b from-transparent to-indigo-900/10 relative overflow-hidden">
+        <div class="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
+        
+        <div class="max-w-5xl mx-auto px-6 text-center relative z-10">
+            <div class="w-24 h-24 bg-indigo-500/5 rounded-full flex items-center justify-center mx-auto mb-12 border border-indigo-500/20">
+                 <i class="fas fa-quote-left text-3xl text-indigo-400"></i>
+            </div>
+           
+            <h2 class="font-display text-3xl md:text-6xl font-extralight leading-tight mb-16 tracking-tight">
+                "Gaurav isn't just a designer; he's a <span class="font-bold text-white relative inline-block">visionary<span class="absolute bottom-1 left-0 w-full h-2 bg-indigo-500/30 -z-10"></span></span>. He took our rough ideas and transformed them into a digital masterpiece."
+            </h2>
+            
+            <div class="flex flex-col items-center justify-center gap-5">
+                <div class="relative">
+                    <div class="absolute inset-0 bg-indigo-500 blur-md rounded-full opacity-40 animate-pulse"></div>
+                    <img src="https://gauravmakwana9.rf.gd/assets/img/about.jpg" alt="Client" class="relative w-20 h-20 rounded-full border-2 border-white/20 object-cover">
+                </div>
+                <div>
+                    <p class="font-display font-bold text-white text-xl">James Carter</p>
+                    <p class="text-[10px] text-indigo-400 font-bold uppercase tracking-widest mt-1">CEO, FutureTech Inc.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="py-12 border-t border-white/5 bg-black relative">
+        <div class="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
+            <div class="flex items-center gap-2">
+                 <span class="font-display font-bold text-xl tracking-tighter text-white">Gaurav<span class="text-indigo-500">.</span></span>
+            </div>
+            
+            <p class="text-gray-600 text-sm font-medium">&copy; 2024 Gaurav Design. All rights reserved.</p>
+
+            <div class="flex gap-6">
+                <a href="#" class="hoverable text-gray-500 hover:text-white transition-colors"><i class="fab fa-twitter"></i></a>
+                <a href="#" class="hoverable text-gray-500 hover:text-white transition-colors"><i class="fab fa-linkedin"></i></a>
+                <a href="#" class="hoverable text-gray-500 hover:text-white transition-colors"><i class="fab fa-dribbble"></i></a>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script>
+        // --- 1. Custom Cursor Logic ---
+        const cursorDot = document.querySelector('.cursor-dot');
+        const cursorOutline = document.querySelector('.cursor-outline');
+        
+        window.addEventListener('mousemove', (e) => {
+            const posX = e.clientX;
+            const posY = e.clientY;
+
+            // Dot follows immediately
+            cursorDot.style.left = `${posX}px`;
+            cursorDot.style.top = `${posY}px`;
+
+            // Outline follows with slight delay/animation
+            cursorOutline.animate({
+                left: `${posX}px`,
+                top: `${posY}px`
+            }, { duration: 500, fill: "forwards" });
+        });
+
+        // Add hover state to interactive elements
+        const hoverables = document.querySelectorAll('a, button, .hoverable, input, select, textarea');
+        hoverables.forEach(el => {
+            el.addEventListener('mouseenter', () => document.body.classList.add('hovering'));
+            el.addEventListener('mouseleave', () => document.body.classList.remove('hovering'));
+        });
+
+        // --- 2. Loader & Initial Animations ---
+        window.addEventListener('load', () => {
+            const loader = document.getElementById('loader');
+            
+            // Wait for progress bar animation
+            setTimeout(() => {
+                loader.style.opacity = '0';
+                
+                setTimeout(() => {
+                    loader.style.display = 'none';
+                    
+                    // Trigger Hero Animations
+                    const tl = gsap.timeline();
+                    
+                    tl.from(".hero-content > *", {
+                        y: 100,
+                        opacity: 0,
+                        duration: 1.5,
+                        stagger: 0.1,
+                        ease: "power4.out"
+                    });
+                }, 500);
+            }, 1500);
+        });
+
+        // --- 3. Icons ---
+        lucide.createIcons();
+
+        // --- 4. Mobile Menu ---
+        const menuBtn = document.getElementById('menu-btn');
+        const mobileMenu = document.getElementById('mobile-menu');
+        const mobileLinks = document.querySelectorAll('.mobile-link');
+        let isMenuOpen = false;
+
+        menuBtn.addEventListener('click', () => {
+            isMenuOpen = !isMenuOpen;
+            if(isMenuOpen) {
+                mobileMenu.classList.remove('translate-x-full');
+                menuBtn.innerHTML = '<i class="fas fa-times"></i>';
+            } else {
+                mobileMenu.classList.add('translate-x-full');
+                menuBtn.innerHTML = '<i class="fas fa-bars"></i>';
+            }
+        });
+
+        mobileLinks.forEach(link => {
+            link.addEventListener('click', () => {
+                isMenuOpen = false;
+                mobileMenu.classList.add('translate-x-full');
+                menuBtn.innerHTML = '<i class="fas fa-bars"></i>';
+            });
+        });
+
+        // --- 5. Scroll Animations (GSAP ScrollTrigger) ---
+        gsap.registerPlugin(ScrollTrigger);
+
+        // General Reveal Up
+        gsap.utils.toArray('.reveal-up').forEach(elem => {
+            gsap.fromTo(elem, 
+                { y: 80, opacity: 0 },
+                {
+                    y: 0,
+                    opacity: 1,
+                    duration: 1.4,
+                    ease: "power3.out",
+                    scrollTrigger: {
+                        trigger: elem,
+                        start: "top 85%",
+                    }
+                }
+            );
+        });
+
+        // Reveal Left
+        gsap.utils.toArray('.reveal-left').forEach(elem => {
+            gsap.fromTo(elem, 
+                { x: -80, opacity: 0 },
+                {
+                    x: 0,
+                    opacity: 1,
+                    duration: 1.5,
+                    ease: "power3.out",
+                    scrollTrigger: {
+                        trigger: elem,
+                        start: "top 80%",
+                    }
+                }
+            );
+        });
+
+        // Reveal Right
+        gsap.utils.toArray('.reveal-right').forEach(elem => {
+            gsap.fromTo(elem, 
+                { x: 80, opacity: 0 },
+                {
+                    x: 0,
+                    opacity: 1,
+                    duration: 1.5,
+                    ease: "power3.out",
+                    scrollTrigger: {
+                        trigger: elem,
+                        start: "top 80%",
+                    }
+                }
+            );
+        });
+
+        // Animated Percentage Bars
+        gsap.utils.toArray('.animate-bar').forEach(bar => {
+            gsap.to(bar, {
+                width: bar.getAttribute('style').split('--w:')[1], // Extract variable
+                duration: 2,
+                ease: "power2.out",
+                scrollTrigger: {
+                    trigger: bar,
+                    start: "top 90%",
+                }
+            });
+        });
+
+        // --- 6. Magnetic Buttons ---
+        const magnets = document.querySelectorAll('.btn-magnetic');
+        
+        magnets.forEach(btn => {
+            btn.addEventListener('mousemove', (e) => {
+                const rect = btn.getBoundingClientRect();
+                const x = e.clientX - rect.left - rect.width / 2;
+                const y = e.clientY - rect.top - rect.height / 2;
+                
+                btn.style.transform = `translate(${x * 0.2}px, ${y * 0.2}px) scale(1.05)`;
+            });
+            
+            btn.addEventListener('mouseleave', () => {
+                btn.style.transform = 'translate(0, 0) scale(1)';
+            });
+        });
+
+        // --- 7. Navbar Blur ---
+        window.addEventListener('scroll', () => {
+            const nav = document.getElementById('navbar');
+            if(window.scrollY > 50) {
+                nav.classList.add('bg-black/20', 'backdrop-blur-sm', 'py-4');
+                nav.classList.remove('py-8');
+            } else {
+                nav.classList.remove('bg-black/20', 'backdrop-blur-sm', 'py-4');
+                nav.classList.add('py-8');
+            }
+        });
+
+        // --- 8. Three.js Background (Smoother Constellation) ---
+        const canvas = document.getElementById('bg-canvas');
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
+
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+
+        // Group
+        const particlesGroup = new THREE.Group();
+        scene.add(particlesGroup);
+
+        // Geometries
+        const geometry = new THREE.BufferGeometry();
+        const count = 150; 
+        const positions = new Float32Array(count * 3);
+        
+        for(let i = 0; i < count * 3; i++) {
+            positions[i] = (Math.random() - 0.5) * 20;
+        }
+        
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+        // Material (Dots)
+        const dotMaterial = new THREE.PointsMaterial({
+            size: 0.04,
+            color: 0x6366f1,
+            transparent: true,
+            opacity: 0.6
+        });
+
+        const points = new THREE.Points(geometry, dotMaterial);
+        particlesGroup.add(points);
+
+        // Floating Torus
+        const torusGeometry = new THREE.TorusKnotGeometry(3, 0.8, 200, 30);
+        const torusMaterial = new THREE.MeshBasicMaterial({ 
+            color: 0x6366f1, 
+            wireframe: true,
+            transparent: true,
+            opacity: 0.03
+        });
+        const torus = new THREE.Mesh(torusGeometry, torusMaterial);
+        scene.add(torus);
+
+        camera.position.z = 6;
+
+        // Mouse
+        let mouseX = 0;
+        let mouseY = 0;
+        let targetX = 0;
+        let targetY = 0;
+
+        document.addEventListener('mousemove', (event) => {
+            mouseX = event.clientX / window.innerWidth - 0.5;
+            mouseY = event.clientY / window.innerHeight - 0.5;
+        });
+
+        // Clock
+        const clock = new THREE.Clock();
+
+        function animate() {
+            const elapsedTime = clock.getElapsedTime();
+
+            targetX = mouseX * 0.3;
+            targetY = mouseY * 0.3;
+
+            // Smoother Rotate Torus
+            torus.rotation.x += 0.001;
+            torus.rotation.y += 0.002;
+            
+            // Mouse parallax for torus
+            torus.rotation.x += 0.02 * (targetY - torus.rotation.x) * 0.05;
+            torus.rotation.y += 0.02 * (targetX - torus.rotation.y) * 0.05;
+
+            // Rotate Particles
+            particlesGroup.rotation.y = elapsedTime * 0.03;
+            particlesGroup.rotation.x = Math.sin(elapsedTime * 0.1) * 0.1;
+
+            renderer.render(scene, camera);
+            requestAnimationFrame(animate);
+        }
+
+        animate();
+
+        // Resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+    </script>
+</body>
+</html>
