@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Cartoon Snake Design</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #1a1a1a;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none; /* Disable text selection */
+        }
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+
+        /* --- UI Overlay Elements --- */
+        
+        /* Leaderboard (Top Left) */
+        #leaderboard {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: rgba(255, 255, 255, 0.9);
+            padding: 10px;
+            font-size: 14px;
+            pointer-events: none;
+        }
+        #leaderboard h3 {
+            margin: 0 0 5px 0;
+            font-size: 16px;
+            color: #ccc;
+        }
+        .player-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 2px;
+            width: 180px;
+            text-shadow: 1px 1px 2px black;
+        }
+        .player-name { font-weight: bold; }
+        .player-score { color: #f0f0f0; }
+        .my-score { color: #ffd700; } /* Highlight current player */
+
+        /* Top Quest Bar (Center) */
+        #top-bar {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            pointer-events: none;
+        }
+        .quest-box {
+            background: rgba(0, 0, 0, 0.6);
+            padding: 8px 20px;
+            border-radius: 20px;
+            color: white;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border: 2px solid #555;
+        }
+        .quest-icon { font-size: 20px; }
+        .progress-container {
+            width: 200px;
+            height: 10px;
+            background: #444;
+            border-radius: 5px;
+            margin-top: 5px;
+            overflow: hidden;
+            border: 1px solid #222;
+        }
+        #quest-fill {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #ff4e50, #f9d423);
+            transition: width 0.3s ease-out;
+        }
+
+        /* Virtual Joystick (Visual Only - Bottom Left) */
+        #joystick-area {
+            position: absolute;
+            bottom: 40px;
+            left: 40px;
+            width: 120px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            pointer-events: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #joystick-knob {
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+
+        /* Instructions Overlay */
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 12px;
+            pointer-events: none;
+            text-align: right;
+        }
+    </style>
+    <!-- Import Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <!-- UI Elements -->
+    <div id="leaderboard">
+        <h3>Top players (99)</h3>
+        <div class="player-row"><span class="player-name">1. Timothy</span><span class="player-score">323234</span></div>
+        <div class="player-row"><span class="player-name">2. Hugo</span><span class="player-score">312782</span></div>
+        <div class="player-row"><span class="player-name">3. Tab</span><span class="player-score">304361</span></div>
+        <div class="player-row"><span class="player-name">4. Lou</span><span class="player-score">297197</span></div>
+        <div class="player-row"><span class="player-name">5. Leopold</span><span class="player-score">282997</span></div>
+        <div class="player-row my-score"><span class="player-name">28. You</span><span id="score-display" class="player-score">11671</span></div>
+    </div>
+
+    <div id="top-bar">
+        <div class="quest-box">
+            <span class="quest-icon">🍎</span>
+            <span id="quest-text">Eat 0/120 food</span>
+        </div>
+        <div class="progress-container">
+            <div id="quest-fill" class="progress-fill"></div>
+        </div>
+    </div>
+
+    <div id="joystick-area">
+        <div id="joystick-knob"></div>
+    </div>
+
+    <div id="instructions">
+        <p>Mouse/Drag to Move</p>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <script>
+        // --- Configuration ---
+        const CONFIG = {
+            color: 0xffcc00, // Golden-yellow
+            headColor: 0xffdb4d,
+            segmentCount: 25,
+            segmentSize: 1.3,
+            headScale: 1.5,
+            speed: 0.25, // Slightly faster for game feel
+            followDistance: 0.9,
+            turnSpeed: 0.12
+        };
+
+        // --- Game State ---
+        let score = 11671;
+        let foodEatenCount = 0;
+        const questGoal = 120;
+
+        // --- DOM Elements ---
+        const scoreDisplay = document.getElementById('score-display');
+        const questFill = document.getElementById('quest-fill');
+        const questText = document.getElementById('quest-text');
+
+        // --- Scene Setup ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a1a);
+        
+        // Fog for depth (darker to match "arena" feel)
+        scene.fog = new THREE.Fog(0x1a1a1a, 30, 90);
+
+        // Camera
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 45, 30); // Higher camera angle like the game
+        camera.lookAt(0, 0, 0);
+
+        // Renderer
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        // --- Lighting ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); // Brighter ambient
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+        dirLight.position.set(20, 40, 20);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        dirLight.shadow.camera.left = -50;
+        dirLight.shadow.camera.right = 50;
+        dirLight.shadow.camera.top = 50;
+        dirLight.shadow.camera.bottom = -50;
+        scene.add(dirLight);
+
+        // --- Environment (Tiled Floor) ---
+        // Create a canvas texture for the dark tiles pattern
+        function createTileTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+            
+            // Background
+            ctx.fillStyle = '#222';
+            ctx.fillRect(0, 0, 512, 512);
+            
+            // Tile pattern (diagonal/herringbone-ish)
+            ctx.strokeStyle = '#2a2a2a';
+            ctx.lineWidth = 4;
+            
+            // Draw grid lines
+            ctx.beginPath();
+            for(let i=0; i<=512; i+=64) {
+                ctx.moveTo(i, 0); ctx.lineTo(i, 512);
+                ctx.moveTo(0, i); ctx.lineTo(512, i);
+            }
+            ctx.stroke();
+
+            // Diagonal Details
+            ctx.strokeStyle = '#262626';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for(let i=-512; i<=1024; i+=32) {
+                ctx.moveTo(i, 0); ctx.lineTo(i+512, 512);
+            }
+            ctx.stroke();
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(10, 10);
+            return texture;
+        }
+
+        const floorGeometry = new THREE.PlaneGeometry(300, 300);
+        const floorMaterial = new THREE.MeshStandardMaterial({ 
+            map: createTileTexture(),
+            roughness: 0.8,
+            metalness: 0.1
+        });
+        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+        floor.rotation.x = -Math.PI / 2;
+        floor.position.y = -0.5;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        // --- Food & Coins (Scattered Items) ---
+        let foods = [];
+        const foodColors = [0xff0000, 0x00ff00, 0xffa500]; // Red, Green, Orange apples
+
+        const appleGeo = new THREE.SphereGeometry(0.8, 16, 16);
+        const leafGeo = new THREE.ConeGeometry(0.2, 0.6, 8);
+        const coinGeo = new THREE.CylinderGeometry(1, 1, 0.2, 32);
+        const coinMat = new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.8, roughness: 0.2 });
+
+        function createFood(x, z, type) {
+            const group = new THREE.Group();
+            
+            if (type === 'apple') {
+                const color = foodColors[Math.floor(Math.random() * foodColors.length)];
+                const mat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.4 });
+                const apple = new THREE.Mesh(appleGeo, mat);
+                apple.position.y = 0.8;
+                apple.castShadow = true;
+                
+                const leaf = new THREE.Mesh(leafGeo, new THREE.MeshStandardMaterial({ color: 0x228b22 }));
+                leaf.position.set(0, 1.4, 0);
+                leaf.rotation.z = 0.5;
+                
+                group.add(apple);
+                group.add(leaf);
+                group.userData.value = 100; // Score value
+            } else {
+                // Coin
+                const coin = new THREE.Mesh(coinGeo, coinMat);
+                coin.rotation.x = Math.PI / 2;
+                coin.rotation.z = Math.random() * Math.PI;
+                coin.position.y = 0.5;
+                coin.castShadow = true;
+                group.add(coin);
+                group.userData.isCoin = true;
+                group.userData.value = 250; // Higher score for coins
+            }
+
+            group.position.set(x, 0, z);
+            scene.add(group);
+            foods.push(group);
+        }
+
+        // Scatter random food initially
+        for (let i = 0; i < 40; i++) {
+            createFood((Math.random() - 0.5) * 80, (Math.random() - 0.5) * 80, Math.random() > 0.3 ? 'apple' : 'coin');
+        }
+
+        // --- Snake Construction ---
+        const snakeSegments = [];
+        const snakeGroup = new THREE.Group();
+        scene.add(snakeGroup);
+
+        const bodyMaterial = new THREE.MeshStandardMaterial({
+            color: CONFIG.color,
+            roughness: 0.4,
+            metalness: 0.1,
+            emissive: 0xaa6600,
+            emissiveIntensity: 0.1
+        });
+
+        const headMaterial = new THREE.MeshStandardMaterial({
+            color: CONFIG.headColor,
+            roughness: 0.4,
+            metalness: 0.1
+        });
+
+        // Head
+        const headGeometry = new THREE.SphereGeometry(CONFIG.segmentSize * CONFIG.headScale, 32, 32);
+        headGeometry.scale(1, 0.85, 1.1); 
+        const headMesh = new THREE.Mesh(headGeometry, headMaterial);
+        headMesh.castShadow = true;
+        headMesh.receiveShadow = true;
+        headMesh.position.set(0, CONFIG.segmentSize, 0);
+        snakeGroup.add(headMesh);
+        snakeSegments.push(headMesh);
+
+        // Face
+        const eyeWhiteGeom = new THREE.SphereGeometry(0.5, 32, 32);
+        const eyeWhiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        const pupilGeom = new THREE.SphereGeometry(0.2, 32, 32);
+        const pupilMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+
+        function createEye(x, y, z) {
+            const eyeGroup = new THREE.Group();
+            const white = new THREE.Mesh(eyeWhiteGeom, eyeWhiteMat);
+            white.scale.set(1, 1, 0.6); 
+            const pupil = new THREE.Mesh(pupilGeom, pupilMat);
+            pupil.position.z = 0.45; pupil.position.y = 0.1;
+            eyeGroup.add(white); eyeGroup.add(pupil);
+            eyeGroup.position.set(x, y, z);
+            return eyeGroup;
+        }
+
+        const leftEye = createEye(-0.8, 0.8, 1.2);
+        const rightEye = createEye(0.8, 0.8, 1.2);
+        leftEye.rotation.set(-0.2, -0.2, 0);
+        rightEye.rotation.set(-0.2, 0.2, 0);
+        headMesh.add(leftEye); headMesh.add(rightEye);
+
+        const mouthGeom = new THREE.TorusGeometry(0.3, 0.1, 8, 16, Math.PI);
+        const mouthMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
+        const mouth = new THREE.Mesh(mouthGeom, mouthMat);
+        mouth.position.set(0, -0.3, 1.5);
+        mouth.rotation.x = Math.PI / 1.2;
+        headMesh.add(mouth);
+
+        // Body Function
+        const segmentGeometry = new THREE.SphereGeometry(CONFIG.segmentSize, 32, 32);
+        
+        function addBodySegment(x, z) {
+            const segment = new THREE.Mesh(segmentGeometry, bodyMaterial);
+            // Spawn at last segment position or head if first
+            const lastSeg = snakeSegments[snakeSegments.length - 1];
+            segment.position.copy(lastSeg.position);
+            
+            // Slightly offset to prevent Z-fighting initially
+            segment.position.z -= 0.1; 
+
+            segment.castShadow = true;
+            segment.receiveShadow = true;
+            snakeGroup.add(segment);
+            snakeSegments.push(segment);
+        }
+
+        // Initialize Body
+        for (let i = 0; i < CONFIG.segmentCount; i++) {
+            addBodySegment(0, - (i + 1) * CONFIG.followDistance);
+        }
+
+        // --- Interaction ---
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        const planeIntersect = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+        let targetPoint = new THREE.Vector3(0, 0, 0);
+        
+        // Joystick Logic
+        const joystickKnob = document.getElementById('joystick-knob');
+        const joystickArea = document.getElementById('joystick-area');
+
+        function updateJoystickVisual(dx, dy) {
+            // Simple visual representation of direction
+            const maxDist = 30;
+            const dist = Math.min(Math.sqrt(dx*dx + dy*dy), 100); // just clamping visually
+            const angle = Math.atan2(dy, dx);
+            
+            const kx = Math.cos(angle) * Math.min(dist, maxDist);
+            const ky = Math.sin(angle) * Math.min(dist, maxDist);
+            
+            joystickKnob.style.transform = `translate(${kx}px, ${ky}px)`;
+        }
+
+        function handleInput(clientX, clientY) {
+            // Screen center logic for direction
+            const cx = window.innerWidth / 2;
+            const cy = window.innerHeight / 2;
+            
+            const dx = clientX - cx;
+            const dy = clientY - cy;
+            
+            // Visual joystick update (mapped to bottom left UI)
+            updateJoystickVisual(dx, dy);
+
+            // Raycast for 3D world target
+            mouse.x = (clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const target = new THREE.Vector3();
+            raycaster.ray.intersectPlane(planeIntersect, target);
+            if (target) targetPoint.copy(target);
+        }
+
+        window.addEventListener('mousemove', e => handleInput(e.clientX, e.clientY));
+        window.addEventListener('touchmove', e => {
+            if(e.touches.length > 0) handleInput(e.touches[0].clientX, e.touches[0].clientY);
+        }, {passive: false});
+
+        // --- Helper: Update Score ---
+        function updateScore(points) {
+            score += points;
+            scoreDisplay.textContent = score;
+            foodEatenCount++;
+            
+            // Update Quest Bar
+            const percent = Math.min((foodEatenCount / questGoal) * 100, 100);
+            questFill.style.width = percent + '%';
+            questText.textContent = `Eat ${foodEatenCount}/${questGoal} food`;
+
+            // Grow Snake (every 2 foods eaten to prevent it getting too long too fast)
+            if (foodEatenCount % 2 === 0) {
+                addBodySegment();
+            }
+        }
+
+        // --- Animation Loop ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // 1. Move Snake Head
+            const head = snakeSegments[0];
+            const direction = new THREE.Vector3().subVectors(targetPoint, head.position);
+            direction.y = 0;
+            const dist = direction.length();
+
+            if (dist > 0.1) {
+                direction.normalize();
+                const targetRotation = Math.atan2(direction.x, direction.z);
+                let rotDiff = targetRotation - head.rotation.y;
+                let rotChange = ((rotDiff + Math.PI) % (Math.PI * 2)) - Math.PI;
+                head.rotation.y += rotChange * CONFIG.turnSpeed;
+                head.position.add(direction.multiplyScalar(CONFIG.speed));
+            }
+            
+            const time = Date.now() * 0.005;
+            head.position.y = (CONFIG.segmentSize * 0.9) + Math.sin(time) * 0.1;
+
+            // 2. Collision Detection (Eating Food)
+            for (let i = foods.length - 1; i >= 0; i--) {
+                const food = foods[i];
+                // Distance check (Head radius + Food radius approx)
+                if (head.position.distanceTo(food.position) < 2.5) {
+                    // EAT FOOD
+                    updateScore(food.userData.value);
+                    
+                    // Remove from scene and array
+                    scene.remove(food);
+                    foods.splice(i, 1);
+
+                    // Respawn new food elsewhere
+                    createFood(
+                        head.position.x + (Math.random() - 0.5) * 60, // Spawn relatively nearby
+                        head.position.z + (Math.random() - 0.5) * 60, 
+                        Math.random() > 0.3 ? 'apple' : 'coin'
+                    );
+                }
+            }
+
+            // 3. Move Body Segments
+            for (let i = 1; i < snakeSegments.length; i++) {
+                const current = snakeSegments[i];
+                const prev = snakeSegments[i - 1];
+                const dx = prev.position.x - current.position.x;
+                const dz = prev.position.z - current.position.z;
+                const distance = Math.sqrt(dx * dx + dz * dz);
+                
+                if (distance > CONFIG.followDistance) {
+                    const ratio = (distance - CONFIG.followDistance) / distance;
+                    const lerpFactor = 0.5;
+                    current.position.x += dx * ratio * lerpFactor;
+                    current.position.z += dz * ratio * lerpFactor;
+                }
+                current.position.y = (CONFIG.segmentSize * 0.9) + Math.sin(time - i * 0.4) * 0.08;
+                
+                // Taper tail scale
+                const isTail = i > snakeSegments.length - 5;
+                if (isTail) {
+                    const scale = 1 - (i - (snakeSegments.length - 5)) * 0.18;
+                    current.scale.setScalar(Math.max(0.2, scale));
+                } else {
+                    current.scale.setScalar(1);
+                }
+            }
+
+            // 4. Animate Coins
+            foods.forEach(group => {
+                if (group.userData.isCoin) {
+                    group.children[0].rotation.z += 0.05;
+                }
+            });
+
+            // 5. Camera Follow
+            camera.position.x += (head.position.x - camera.position.x) * 0.08;
+            camera.position.z += (head.position.z + 35 - camera.position.z) * 0.08; 
+            camera.lookAt(head.position.x, 0, head.position.z);
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
